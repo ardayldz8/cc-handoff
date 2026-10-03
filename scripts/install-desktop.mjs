@@ -20,7 +20,8 @@ export const POLL_INTERVAL_MS = 3000;
 // Package family folders look like Claude_pzs8sxrjxfjjc (13-char publisher ID).
 // The app bundle also references an AnthropicPBC.Claude_ family, so accept both.
 const PACKAGE_DIR_RE = /^(?:AnthropicPBC\.)?Claude_[a-z0-9]{13}$/i;
-const CLAUDE_APP_PATH_RE = /\\windowsapps\\(?:anthropicpbc\.)?claude_/i;
+// MSIX installs run from WindowsApps; the classic (Squirrel) installer uses %LOCALAPPDATA%\AnthropicClaude.
+const CLAUDE_APP_PATH_RE = /\\windowsapps\\(?:anthropicpbc\.)?claude_|\\appdata\\local\\anthropicclaude\\/i;
 
 export class ConfigError extends Error {}
 
@@ -96,35 +97,42 @@ export function isInsideClaude(processes, pid) {
 }
 
 /**
- * Finds the config Claude Desktop actually reads. MSIX installs virtualize
- * %APPDATA%\Claude into the package's LocalCache folder.
+ * Finds the config Claude Desktop actually reads, using the app's own rule:
+ * an MSIX install redirects %APPDATA%\Claude to <package>\LocalCache\Roaming\Claude
+ * only if that folder exists; otherwise (e.g. upgraded from the classic installer)
+ * it reads the real %APPDATA%\Claude. Non-MSIX installs always use %APPDATA%\Claude.
  * Returns { configPath, packageFamily | null } or throws ConfigError describing what was found.
  */
 export function locateConfig(env) {
   const openOnce = "Open Claude Desktop once so it creates its config, quit it, then run this again.";
   const packagesDir = env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, "Packages") : null;
   const packages = packagesDir && existsSync(packagesDir) ? readdirSync(packagesDir).filter((n) => PACKAGE_DIR_RE.test(n)) : [];
+  const classic = env.APPDATA ? path.join(env.APPDATA, "Claude", CONFIG_FILE) : null;
+  const describe = (p) => `${p} (${existsSync(p) ? "exists" : "missing"})`;
 
-  if (packages.length > 0) {
-    const found = packages.map((name) => {
-      const configPath = path.join(packagesDir, name, "LocalCache", "Roaming", "Claude", CONFIG_FILE);
-      return { configPath, packageFamily: name, exists: existsSync(configPath) };
-    });
-    const listing = found.map((f) => `${f.configPath} (${f.exists ? "exists" : "missing"})`).join("\n  ");
-    const withConfig = found.filter((f) => f.exists);
+  const virtualized = packages
+    .map((name) => ({ packageFamily: name, dir: path.join(packagesDir, name, "LocalCache", "Roaming", "Claude") }))
+    .filter((p) => existsSync(p.dir))
+    .map((p) => ({ ...p, configPath: path.join(p.dir, CONFIG_FILE) }));
+  const listing = virtualized.map((p) => describe(p.configPath)).join("\n  ");
+
+  if (virtualized.length > 0) {
+    const withConfig = virtualized.filter((p) => existsSync(p.configPath));
     if (withConfig.length === 1) return { configPath: withConfig[0].configPath, packageFamily: withConfig[0].packageFamily };
-    if (withConfig.length > 1) {
-      throw new ConfigError(`Found more than one Claude Desktop config; not sure which one to edit:\n  ${listing}`);
+    if (withConfig.length > 1 || virtualized.length > 1) {
+      throw new ConfigError(`Found more than one Claude Desktop config location; not sure which one to edit:\n  ${listing}`);
     }
-    // An MSIX install without a config yet: never fall back to %APPDATA%, the app would not read it.
-    throw new ConfigError(`Claude Desktop (MSIX) is installed but has no config yet:\n  ${listing}\n${openOnce}`);
+    // Virtualized MSIX install without a config yet: %APPDATA%\Claude would not be read.
+    throw new ConfigError(`Claude Desktop (MSIX) has no config yet:\n  ${listing}\n${openOnce}`);
   }
 
-  const classic = env.APPDATA ? path.join(env.APPDATA, "Claude", CONFIG_FILE) : null;
-  if (classic && existsSync(classic)) return { configPath: classic, packageFamily: null };
+  // No package, or an MSIX package without virtualization: the app reads the real %APPDATA%\Claude.
+  const packageFamily = packages.length === 1 ? packages[0] : null;
+  if (classic && existsSync(classic)) return { configPath: classic, packageFamily };
   throw new ConfigError(
-    `No Claude Desktop config found. Checked:\n  ${packagesDir ?? "%LOCALAPPDATA% (not set)"}\\Claude_* (none)\n  ` +
-      `${classic ?? "%APPDATA% (not set)"} (missing)\n${openOnce}`,
+    "No Claude Desktop config found. Checked:\n  " +
+      `${packagesDir ?? "%LOCALAPPDATA%\\Packages"}\\Claude_*\\LocalCache\\Roaming\\Claude (${packages.length ? "absent" : "no package"})\n  ` +
+      `${classic ? describe(classic) : "%APPDATA% (not set)"}\n${openOnce}`,
   );
 }
 

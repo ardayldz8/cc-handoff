@@ -78,8 +78,10 @@ Notes:
   `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json`.
   Inside the app (and in terminals it starts) `%APPDATA%\Claude` is redirected
   there, but from a normal terminal that folder does not exist, so a file created
-  at `%APPDATA%\Claude` is never read. The script finds the right file and only
-  uses `%APPDATA%\Claude` for non-MSIX installs.
+  at `%APPDATA%\Claude` is never read. The script follows the app's own rule:
+  it uses the LocalCache file when the package's `LocalCache\Roaming\Claude`
+  folder exists, and the real `%APPDATA%\Claude` otherwise (classic installs, or
+  MSIX installs upgraded from the classic installer).
 - **Run it outside Claude.** Claude Code sessions in the desktop app are child
   processes of Claude Desktop and are closed with it, so the script refuses to
   install from inside one. Use Explorer or a normal terminal.

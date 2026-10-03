@@ -116,6 +116,11 @@ describe("process detection", () => {
     expect(findClaudeAppProcesses(processes).map((p) => p.ProcessId)).toEqual([10]);
   });
 
+  it("also matches the classic (non-MSIX) install folder", () => {
+    const classic = { ProcessId: 50, ParentProcessId: 1, ExecutablePath: "C:\\Users\\x\\AppData\\Local\\AnthropicClaude\\app-1.0.0\\claude.exe" };
+    expect(findClaudeAppProcesses([...processes, classic]).map((p) => p.ProcessId)).toEqual([10, 50]);
+  });
+
   it("detects running inside Claude's process tree", () => {
     expect(isInsideClaude(processes, 12)).toBe(true);
     expect(isInsideClaude(processes, 21)).toBe(false);
@@ -163,16 +168,27 @@ describe("locateConfig", () => {
     expect(locateConfig(env)).toEqual({ configPath: file, packageFamily: "Claude_pzs8sxrjxfjjc" });
   });
 
-  it("ignores Claude-3p and unrelated packages", async () => {
+  it("uses %APPDATA% for an MSIX install without a LocalCache Claude folder (not virtualized)", async () => {
+    // Only Claude-3p exists in LocalCache, as after an upgrade from the classic installer.
     await fs.mkdir(path.join(env.LOCALAPPDATA, "Packages", "Claude_pzs8sxrjxfjjc", "LocalCache", "Roaming", "Claude-3p"), {
       recursive: true,
     });
-    await addPackage("SomethingClaude_abcdefghijklm");
     const classic = await addClassic();
-    // The Claude_ package exists, but only with a Claude-3p config: no fallback to %APPDATA%.
-    expect(() => locateConfig(env)).toThrow(/no config yet/);
-    await fs.rm(path.join(env.LOCALAPPDATA, "Packages", "Claude_pzs8sxrjxfjjc"), { recursive: true });
+    expect(locateConfig(env)).toEqual({ configPath: classic, packageFamily: "Claude_pzs8sxrjxfjjc" });
+  });
+
+  it("ignores unrelated package folders", async () => {
+    await addPackage("SomethingClaude_abcdefghijklm");
+    await addPackage("Claude_tooshort");
+    const classic = await addClassic();
     expect(locateConfig(env)).toEqual({ configPath: classic, packageFamily: null });
+  });
+
+  it("asks to open Claude once when the virtualized folder has no config yet", async () => {
+    await addPackage("Claude_pzs8sxrjxfjjc", false);
+    await addClassic();
+    // %APPDATA%\Claude must not be used here: the app reads the LocalCache folder.
+    expect(() => locateConfig(env)).toThrow(/no config yet[\s\S]*Open Claude Desktop once/);
   });
 
   it("accepts the AnthropicPBC.Claude_ package family", async () => {
