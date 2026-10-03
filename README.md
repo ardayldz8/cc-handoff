@@ -32,9 +32,12 @@ directory (the default does that), so they see the same tasks.
 claude mcp add --scope user cc-handoff -- node /absolute/path/to/cc-handoff/dist/index.js
 ```
 
-**Claude Desktop**: add this to `claude_desktop_config.json`
-(Windows: `%APPDATA%\Claude\`, macOS: `~/Library/Application Support/Claude/`),
-then fully quit and restart the app:
+**Claude Desktop on Windows**: after `npm run build`, quit Claude Desktop and
+double-click `install-desktop.cmd` in the repo folder. See
+[Windows: Claude Desktop install](#windows-claude-desktop-install) below.
+
+**Claude Desktop on macOS**: with the app fully quit, add this to
+`~/Library/Application Support/Claude/claude_desktop_config.json`, then start it:
 
 ```json
 {
@@ -47,8 +50,41 @@ then fully quit and restart the app:
 }
 ```
 
-On Windows, write the path with escaped backslashes
-(`"C:\\Users\\you\\cc-handoff\\dist\\index.js"`) or forward slashes.
+## Windows: Claude Desktop install
+
+Claude Desktop must be **fully closed** while its config is edited. The running
+app keeps `claude_desktop_config.json` in memory and rewrites the whole file
+whenever a setting changes, so anything added while it runs is silently lost.
+
+1. Quit Claude Desktop from the system tray (right-click the icon → Quit).
+   Closing the window is not enough.
+2. Double-click `install-desktop.cmd` in the repo folder. If Claude is still
+   running, the script asks you to quit it and waits (up to 5 minutes).
+3. The script backs up the config (`claude_desktop_config.json.bak-<timestamp>`),
+   adds `mcpServers.cc-handoff`, verifies that nothing else changed, and starts
+   Claude again. Check **Settings → Developer** for `cc-handoff`.
+
+Running it again is safe: if the entry is already there, nothing is written.
+Preview without changing anything:
+
+```bash
+install-desktop.cmd --dry-run
+```
+
+Notes:
+
+- **Where the config really is.** Claude Desktop from the Microsoft Store / MSIX
+  installer reads
+  `%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json`.
+  Inside the app (and in terminals it starts) `%APPDATA%\Claude` is redirected
+  there, but from a normal terminal that folder does not exist, so a file created
+  at `%APPDATA%\Claude` is never read. The script finds the right file and only
+  uses `%APPDATA%\Claude` for non-MSIX installs.
+- **Run it outside Claude.** Claude Code sessions in the desktop app are child
+  processes of Claude Desktop and are closed with it, so the script refuses to
+  install from inside one. Use Explorer or a normal terminal.
+- The entry stores the full path of the `node.exe` that ran the script. If you
+  move or reinstall Node.js elsewhere, or move this repo, run the installer again.
 
 ## Tools
 
@@ -76,8 +112,14 @@ editing its file; no tool does that yet).
 ## Development
 
 ```bash
-npm test        # store unit tests (vitest)
+npm test        # store and installer unit tests (vitest)
 npm run smoke   # builds, starts the server over stdio, runs a full task -> report cycle
+```
+
+To try the Windows installer against a copy of a config file:
+
+```bash
+node scripts/install-desktop.mjs --dry-run --config path/to/copy/claude_desktop_config.json
 ```
 
 ## License
