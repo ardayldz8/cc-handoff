@@ -1,0 +1,32 @@
+{
+  "name": "cc-handoff",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local MCP server that hands tasks and reports between a planner Claude chat and Claude Code.",
+  "license": "MIT",
+  "author": "Arda Yıldız",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ardayldz8/cc-handoff.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "smoke": "tsc && node scripts/smoke.mjs",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
